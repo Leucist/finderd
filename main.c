@@ -100,10 +100,10 @@ int main(int argc, char* argv[]) {
 			else if (pid == 0) break;	// throws child out of the loop
 			children[i] = pid;
 		}
-		int filesFound;
-		if (pid == 0) {
-			filesFound += search(".", keyWords[i]) > 0 ? 1 : 0;
-			exit(0);
+		if (pid == 0) {					// for the child process
+			int anyFilesFound;
+			anyFilesFound = search(".", keyWords[i]) > 0 ? 1 : 0;
+			exit(anyFilesFound);
 		}
 		// Parent process continues >
 		signal(SIGUSR1, handleSignals);
@@ -115,24 +115,44 @@ int main(int argc, char* argv[]) {
 			waitpid(children[childno], &childExitStatuses[childno]);
 		}
 
+		// frees the memory after malloc()
 		free(children);
 
+		int filesFound = 0;
 		// if child process was terminated by the signal
 		if (WIFSIGNALED(childExitStatuses[0])) {
 			int termSig = WTERMSIG(childExitStatuses[0]);	// gets the signal that terminated the child process
-			setCurrentTime(&current_time, local_time, time_str, sizeof(time_str));
-			sprintf(message, "%s | Daemon was interrupted via the %s signal", time_str, strsignal(termSig));
-			syslog(LOG_INFO, "%s", message);
+			if (notificationsEnabled) {
+				setCurrentTime(&current_time, local_time, time_str, sizeof(time_str));
+				sprintf(message, "%s | Daemon was interrupted via the %s signal", time_str, strsignal(termSig));
+				syslog(LOG_INFO, "%s", message);
+			}
 			if (termSig == SIGUSR1) {
 				continue;
 			}
 		}
+		// if children exited normally
+		else if (WIFEXITED(childExitStatuses[0])) {
+			// adds the filesFound
+			for (int childno = 0; childno < childrenAmount; childno++) {
+				filesFound += WEXITSTATUS(childExitStatuses[childno]);
+			}
+		}
+		// if no files found
 		else if (filesFound <= 0) {
 			setCurrentTime(&current_time, local_time, time_str, sizeof(time_str));
 			sprintf(message, "%s | No files found", time_str);
 			syslog(LOG_INFO, "%s", message);
 		}
 
+		// notifies about the daemon falling asleep
+		if (notificationsEnabled) {
+			setCurrentTime(&current_time, local_time, time_str, sizeof(time_str));
+			sprintf(message, "%s | Daemon fell asleep", time_str);
+			syslog(LOG_INFO, "%s", message);
+		}
+
+		// daemon sleeps
 		sleep(delay);
 	}
 

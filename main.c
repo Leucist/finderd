@@ -37,8 +37,8 @@ int main(int argc, char* argv[]) {
     char message[256];
 
 	for (int i = 1; i < argc; i++) {
-		if (strcmp(argv[i], "-v")) notificationsEnabled = 1;
-		else if (strcmp(argv[i], "-t")) {
+		if (strcmp(argv[i], "-v") == 0) notificationsEnabled = 1;
+		else if (strcmp(argv[i], "-t") == 0) {
 			// Sets the delay value or report an error and stops the program
 			if (++i >= argc || ((delay = atoi(argv[i])) == 0 && strcmp(argv[i], "0") != 0)) {
 				fprintf(stderr, "Invalid delay input\n");
@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
 			int termSig = WTERMSIG(childExitStatuses[0]);	// gets the signal that terminated the child process
 			if (notificationsEnabled) {
 				setCurrentTime(time_str, sizeof(time_str));
-				sprintf(message, "%s | Daemon was interrupted by the %s signal", time_str, strsignal(termSig));
+				sprintf(message, "%s | Daemon was interrupted by the signal number %d: %s", time_str, termSig, strsignal(termSig));
 				syslog(LOG_INFO, "%s", message);
 			}
 			if (termSig == SIGUSR1) {

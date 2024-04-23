@@ -5,8 +5,8 @@
 #include <unistd.h>		// for fork(), setsid(), sleep()
 #include <fcntl.h>		// for handling file descriptors
 #include <syslog.h>
-#include <time.h>
 #include <signal.h>
+#include <sys/wait.h>	// for waitpid()
 
 #include "search.h"
 #include "setCurrentTime.h"
@@ -14,12 +14,15 @@
 pid_t *children;
 int childrenAmount = 0;
 
+void killChildren(int signo) {
+	for (int i = 0; i < childrenAmount; i++) {
+		kill(children[i], signo);
+	}
+}
+
 void handleSignals(int signo) {
 	if (signo == SIGUSR1 || signo == SIGUSR2) {
-		for (int i = 0; i < childrenAmount; i++) {
-			// terminates children
-			kill(children[i], signo);
-		}
+		killChildren(signo);
 	}
 }
 
@@ -30,8 +33,6 @@ int main(int argc, char* argv[]) {
 	int keyWordsAmount = 0;		/* amount of the given keywords */
 	char* keyWords[argc - 1];	/* array to store the keywords */
 
-	time_t current_time;
-    struct tm *local_time;
     char time_str[64];
     char message[256];
 
@@ -81,14 +82,15 @@ int main(int argc, char* argv[]) {
 	openlog("finderd", LOG_PID, LOG_USER);
 
 	while(1) {
-		// notification
+		// notifies about daemon awakening
 		if (notificationsEnabled) {
-			setCurrentTime(&current_time, local_time, time_str, sizeof(time_str));
+			setCurrentTime(time_str, sizeof(time_str));
 			sprintf(message, "%s | Daemon woke up", time_str);
 			syslog(LOG_INFO, "%s", message);
 		}
 
-		// process division
+
+		// - Process Division
 		pid_t pid;
 
 		childrenAmount = keyWordsAmount;
@@ -97,62 +99,87 @@ int main(int argc, char* argv[]) {
 		for (int i = 0; i < keyWordsAmount; i++) {
 			pid = fork();
 			if (pid < 0) return 1;
-			else if (pid == 0) break;	// throws child out of the loop
+			else if (pid == 0) {			// < for the child process
+				int anyFilesFound = 0;
+				search(".", keyWords[i], &anyFilesFound, notificationsEnabled);
+				exit(anyFilesFound);
+			}
 			children[i] = pid;
 		}
-		if (pid == 0) {					// for the child process
-			int anyFilesFound;
-			anyFilesFound = search(".", keyWords[i]) > 0 ? 1 : 0;
-			exit(anyFilesFound);
-		}
+		
 		// Parent process continues >
 		signal(SIGUSR1, handleSignals);
 		signal(SIGUSR2, handleSignals);
 		// signal(SIGCHLD, handleSignals);
 
+
+		// - Infinite loop that waits till the child processes terminate
 		int childExitStatuses[childrenAmount];
-		for (int childno = 0; childno < childrenAmount; childno++) {
-			waitpid(children[childno], &childExitStatuses[childno]);
+		int childrenTerminated = 0;
+
+		while (childrenTerminated < childrenAmount) {
+			childrenTerminated = 0;	/* resets the counter */
+			// constantly checks if any child was terminated
+			for (int childno = 0; childno < childrenAmount; childno++) {
+				waitpid(children[childno], &childExitStatuses[childno], WNOHANG);
+				// if child was terminated by the signal
+				if (WIFSIGNALED(childExitStatuses[childno])) {
+					killChildren(SIGKILL);	/* send SIGKILL to all the children */
+					childrenTerminated = childrenAmount;	/* < to end the loop */
+					break;
+				}
+				// if child exited normally
+				else if (WIFEXITED(childExitStatuses[childno])) {
+					childrenTerminated++;
+				}
+			}
 		}
 
-		// frees the memory after malloc()
+		/* obsolete contruction that was waiting till the children end one by one in the fixed order */
+		// for (int childno = 0; childno < childrenAmount; childno++) {
+		// 	waitpid(children[childno], &childExitStatuses[childno]);
+		// }
+
+		// - Freeing the memory allocated with the malloc()
 		free(children);
 
+
+		// - Daemon goes through the terminated children once again and collects data
 		int filesFound = 0;
 		// if child process was terminated by the signal
 		if (WIFSIGNALED(childExitStatuses[0])) {
 			int termSig = WTERMSIG(childExitStatuses[0]);	// gets the signal that terminated the child process
 			if (notificationsEnabled) {
-				setCurrentTime(&current_time, local_time, time_str, sizeof(time_str));
-				sprintf(message, "%s | Daemon was interrupted via the %s signal", time_str, strsignal(termSig));
+				setCurrentTime(time_str, sizeof(time_str));
+				sprintf(message, "%s | Daemon was interrupted by the %s signal", time_str, strsignal(termSig));
 				syslog(LOG_INFO, "%s", message);
 			}
 			if (termSig == SIGUSR1) {
-				continue;
+				continue;	// skips the sleep and restarts immidiately
 			}
 		}
 		// if children exited normally
 		else if (WIFEXITED(childExitStatuses[0])) {
-			// adds the filesFound
+			// adds up to the filesFound if any files were found
 			for (int childno = 0; childno < childrenAmount; childno++) {
 				filesFound += WEXITSTATUS(childExitStatuses[childno]);
 			}
 		}
 		// if no files found
 		else if (filesFound <= 0) {
-			setCurrentTime(&current_time, local_time, time_str, sizeof(time_str));
+			setCurrentTime(time_str, sizeof(time_str));
 			sprintf(message, "%s | No files found", time_str);
 			syslog(LOG_INFO, "%s", message);
 		}
 
-		// notifies about the daemon falling asleep
+		// notifies about putting the daemon to sleep
 		if (notificationsEnabled) {
-			setCurrentTime(&current_time, local_time, time_str, sizeof(time_str));
+			setCurrentTime(time_str, sizeof(time_str));
 			sprintf(message, "%s | Daemon fell asleep", time_str);
 			syslog(LOG_INFO, "%s", message);
 		}
 
-		// daemon sleeps
+		// - Putting the daemon to sleep
 		sleep(delay);
 	}
 

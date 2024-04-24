@@ -5,7 +5,7 @@
 #include <unistd.h>
 // #include <sys/wait.h>
 #include <sys/stat.h>
-#include <signal.h>
+// #include <signal.h>
 #include <syslog.h>
 
 #include "search.h"
@@ -25,8 +25,6 @@ void search(const char *path, const char *keyword, int *anyFilesFound, int verbo
 			sprintf(message, "%s | Failed to open directory", time_str);
 			syslog(LOG_INFO, "%s", message);
         }      
-		signal(SIGUSR1, SIG_DFL);
-		signal(SIGUSR2, SIG_DFL);
     }
 
     while ((entry = readdir(dir)) != NULL) { // iterate by each file and folder from the starting directory
@@ -34,6 +32,16 @@ void search(const char *path, const char *keyword, int *anyFilesFound, int verbo
             continue;
 
         snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
+
+
+
+        setCurrentTime(time_str, sizeof(time_str));
+		sprintf(message, "%s | Checking file: %s, Pattern: %s", time_str, fullPath, keyword);
+		syslog(LOG_INFO, "%s", message);
+
+
+
+        
         if (lstat(fullPath, &statbuf) != 0) { // checks if entry cannot be accessed
         	if(verbose) {
         		setCurrentTime(time_str, sizeof(time_str));

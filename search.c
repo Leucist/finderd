@@ -13,14 +13,14 @@
 
 void search(const char *path, const char *keyword, int *anyFilesFound, int verbose) {
     DIR *dir;
-    struct dirent *entry;	// starting directory
-    struct stat statbuf;	// current directory
-    char fullPath[256];		// structure that hold file attributes
-    char time_str[64];		// string to contain current time
-    char message[256];		// message to be sent to the syslog
+    struct dirent *entry;		// starting directory
+    struct stat statbuf;		// current directory
+    char fullPath[PATH_MAX];	// structure that hold file attributes
+    char time_str[64];			// string to contain current time
+    char message[256];			// message to be sent to the syslog
 
     if ((dir = opendir(path)) == NULL) { // open starting directory  
-        if(verbose){		// if we have -v parameter
+        if(verbose){			// if we have -v parameter
         	setCurrentTime(time_str, sizeof(time_str));
 			sprintf(message, "%s | Failed to open directory", time_str);
 			syslog(LOG_INFO, "%s", message);
@@ -34,12 +34,12 @@ void search(const char *path, const char *keyword, int *anyFilesFound, int verbo
         snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
 
 
-
-        setCurrentTime(time_str, sizeof(time_str));
-		sprintf(message, "%s | Checking file: %s, Pattern: %s", time_str, fullPath, keyword);
-		syslog(LOG_INFO, "%s", message);
-
-
+        if (verbose) {
+        	setCurrentTime(time_str, sizeof(time_str));
+			sprintf(message, "%s | Checking file: %s, Pattern: %s", time_str, fullPath, keyword);
+			syslog(LOG_INFO, "%s", message);
+        }
+        
 
         
         if (lstat(fullPath, &statbuf) != 0) { // checks if entry cannot be accessed
@@ -51,13 +51,14 @@ void search(const char *path, const char *keyword, int *anyFilesFound, int verbo
             continue;		// skip to the next iteration
         }
 
-        if (S_ISREG(statbuf.st_mode)) {	// checks if entry is a regular file
-            if (strstr(entry->d_name, keyword) != NULL) { // compare the file name to searching file name
-            	setCurrentTime(time_str, sizeof(time_str));
-				sprintf(message, "%s | Found file: %s, Pattern: %s", time_str, fullPath, keyword);
-				syslog(LOG_INFO, "%s", message);
-				*anyFilesFound = 1;
-            }
+        // if (S_ISREG(statbuf.st_mode)) {	// checks if entry is a regular file
+            
+        // }
+        if (strstr(entry->d_name, keyword) != NULL) { // compare the entry name to searching file name
+        	setCurrentTime(time_str, sizeof(time_str));
+			sprintf(message, "%s | Found file: %s, Pattern: %s", time_str, fullPath, keyword);
+			syslog(LOG_INFO, "%s", message);
+			*anyFilesFound = 1;
         }
 
         else if (S_ISDIR(statbuf.st_mode)) { // checks if entry is a directory

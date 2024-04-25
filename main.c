@@ -38,6 +38,54 @@ void handleSignals(int signo) {
 	}
 }
 
+int deamonise() {
+	// constant to define the max_fd if sysconf(_SC_OPEN_MAX) fails
+	const int MAX_FD = 8192;
+
+	// fork reassures that the process is not the current group leader
+	switch(fork()) {
+		case -1: return -1;
+		case 0: break;                  // child falls through
+		default: _exit(EXIT_SUCCESS);   // parent terminates
+	}
+
+	if (setsid() == -1) {				// makes process the leader of the newly created session
+		perror("Error occured in setsid()"); 
+		return -1;
+	}
+
+	// fork reassures that the process is not the group leader
+	switch(fork()) {
+		case -1: return -1;
+		case 0: break;                  // child falls through
+		default: _exit(EXIT_SUCCESS);   // parent terminates
+	}
+
+	// changes the current directory to the root directory
+	if (chdir("/") == -1) {
+		perror("Error occured in chdir()"); 
+		return -1;
+	}
+
+	// closes all file descriptors
+	int max_fd = sysconf(_SC_OPEN_MAX);
+	if (max_fd == -1) max_fd = MAX_FD;
+	for (int fd = 0; fd < max_fd; fd++)
+		close(fd);
+
+	// closes stdin then points stdout and stderr to '/dev/null'
+	close(STDIN_FILENO);
+	int fd = open("/dev/null", O_RDWR);
+	if(fd != STDIN_FILENO)
+		return -1;
+	if(dup2(STDIN_FILENO, STDOUT_FILENO) != STDOUT_FILENO)
+		return -2;
+	if(dup2(STDIN_FILENO, STDERR_FILENO) != STDERR_FILENO)
+		return -3;
+
+	return 0;
+}
+
 int main(int argc, char* argv[]) {
 	// Handle params
 	int delay = 30;	/* delay after search in seconds */
@@ -63,42 +111,78 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Init the daemon
-	pid_t daemon_pid;
-	daemon_pid = fork();							// creates new process
-	if (daemon_pid == -1) {
-		perror("Error occured in fork()"); 
-		return 1;
-	}
-	else if (daemon_pid != 0) exit(EXIT_SUCCESS);	// terminates the parent process
+	if(deamonise()) return -1;
 
-	if (setsid() == -1) {
-		perror("Error occured in setsid()"); 
-		return 1;
-	}
-
-	if (chdir("/") == -1) {
-		perror("Error occured in chdir()"); 
-		return 1;
-	}
-
-	// closes all file descriptors
-	int max_fd = sysconf(_SC_OPEN_MAX);
-	for (int fd = 0; fd < max_fd; fd++) close(fd);
-
-	openlog("finderd", LOG_PID, LOG_USER);
-	syslog(LOG_INFO, "I have closed all file descriptors! At least it seems so.");
-
-
-	// redirects fd's 0, 1, 2 to '/dev/null'
-	open("/dev/null", O_RDWR);	/* stdin */
-	dup(0);						/* stdout */
-	dup(0);						/* stderror */
-
-	syslog(LOG_INFO, "I have redirected in, out and err to the '/dev/null'! At least it seems so.");
-	// closelog();
-
+	
 	// opens connection with the syslog (user-level messages with pid in each one)
-	// openlog("finderd", LOG_PID, LOG_USER);
+	openlog("finderd", LOG_PID, LOG_USER);
+
+
+
+
+
+
+	
+	// ----------------------
+	// ----------------------
+	// pid_t pid;
+	// for (int i = 0; i < keyWordsAmount; i++) {
+	// 	pid = fork();
+	// 	if (pid < 0) return 1;
+	// 	else if (pid == 0) {			// < for the child process
+	// 		int anyFilesFound = 0;
+	// 		search(".", keyWords[i], &anyFilesFound, notificationsEnabled);
+	// 		exit(anyFilesFound);
+	// 	}
+	// }
+	// // Parent process continues >
+	// signal(SIGUSR1, handleSignals);
+	// signal(SIGUSR2, handleSignals);
+
+	// int childExitStatuses[childrenAmount];
+	// int childrenTerminated = 0;
+
+	// while (childrenTerminated < childrenAmount) {
+	// 	childrenTerminated = 0;	/* resets the counter */
+	// 	// constantly checks if any child was terminated
+	// 	for (int childno = 0; childno < childrenAmount; childno++) {
+	// 		waitpid(children[childno], &childExitStatuses[childno], WNOHANG);
+	// 		// if child was terminated by the signal
+	// 		if (WIFSIGNALED(childExitStatuses[childno])) {
+
+
+
+	// 			int termSig = WTERMSIG(childExitStatuses[childno]);
+	// 			setCurrentTime(time_str, sizeof(time_str));
+	// 			sprintf(message, "%s | [PARENT]: Child process %d terminated by the signal %d: %s", time_str, children[childno], termSig, strsignal(termSig));
+	// 			syslog(LOG_INFO, "%s", message);
+
+
+
+
+	// 			killChildren(SIGKILL);	/* send SIGKILL to all the children */
+	// 			childrenTerminated = childrenAmount;	/* < to end the loop */
+	// 			break;
+	// 		}
+	// 		// if child exited normally
+	// 		else if (WIFEXITED(childExitStatuses[childno])) {
+	// 			childrenTerminated++;
+
+
+	// 			setCurrentTime(time_str, sizeof(time_str));
+	// 			sprintf(message, "%s | [PARENT]: Child process %d exited normally. Children terminated: %d", time_str, children[childno], childrenTerminated);
+	// 			syslog(LOG_INFO, "%s", message);
+	// 		}
+	// 	}
+	// }
+	// exit(100);
+	// ----------------------
+	// ----------------------
+
+
+
+
+
 
 	while(1) {
 		// notifies about daemon awakening
@@ -127,17 +211,15 @@ int main(int argc, char* argv[]) {
 
 
 				// - Setting signal mask to ignore all signals except SIGUSR1, SIGUSR2
-				sigset_t *maskSet;
-				sigfillset(maskSet);
-				sigdelset(maskSet, SIGUSR1);
-				sigdelset(maskSet, SIGUSR2);
-				sigprocmask(SIG_SETMASK, maskSet, NULL);
+				// sigset_t maskSet;
+				// sigfillset(&maskSet);
+				// sigdelset(&maskSet, SIGUSR1);
+				// sigdelset(&maskSet, SIGUSR2);
+				// sigprocmask(SIG_SETMASK, &maskSet, NULL);
 
-
-
-				setCurrentTime(time_str, sizeof(time_str));
-				sprintf(message, "%s | [CHILD %d] Signal mask set", time_str, getpid());
-				syslog(LOG_INFO, "%s", message);
+				// setCurrentTime(time_str, sizeof(time_str));
+				// sprintf(message, "%s | [CHILD %d] Signal mask set", time_str, getpid());
+				// syslog(LOG_INFO, "%s", message);
 
 
 
@@ -147,6 +229,7 @@ int main(int argc, char* argv[]) {
 
 				int anyFilesFound = 0;
 				search(".", keyWords[i], &anyFilesFound, notificationsEnabled);
+				// sleep(1);
 
 
 				setCurrentTime(time_str, sizeof(time_str));

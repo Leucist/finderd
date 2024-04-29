@@ -126,8 +126,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Init the daemon
-	// if(daemonise()) return -1;
-	if(daemon(0, 0)) return -1;
+	if(daemonise()) return -1;
+	// if(daemon(0, 0)) return -1;
 
 	
 	// opens connection with the syslog (user-level messages with pid in each one)

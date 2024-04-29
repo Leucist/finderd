@@ -33,23 +33,25 @@ void handleSignals(int signo) {
 
 
 
-	// if (signo == SIGUSR1 || signo == SIGUSR2 || signo == SIGINT) {
-	// redirects the signal to the children
-	killChildren(signo);
-	// }
-		if (signo == SIGINT) {
-			// to avoid creating the orphans in any way
+	if (signo == SIGUSR1 || signo == SIGUSR2 || signo == SIGINT) {
+		// if (childrenAmount > 0) {
+			// redirects the signal to the children
+			killChildren(signo);
+		// }
+
+		if (signo == SIGINT) {	/* < to avoid creating orphans in any way */
 			free(children);
 			closelog();
 			exit(-1);
 		}
+	}
 }
 
-void handleChildSignals(int signo) {
-	// sends signal SIGUSR1 to the parent process and terminate
-	kill(getppid(), signo);
-	exit(0);
-}
+// void handleChildSignals(int signo) {
+// 	// sends signal SIGUSR1 to the parent process and terminate
+// 	kill(getppid(), signo);
+// 	exit(0);
+// }
 
 int daemonise() {
 	// constant to define the max_fd if sysconf(_SC_OPEN_MAX) fails
@@ -163,7 +165,7 @@ int main(int argc, char* argv[]) {
 		// - Process Division
 		pid_t pid;
 
-		childrenAmount = keyWordsAmount;
+		childrenAmount = keyWordsAmount;	/* resets the counter */
 		children = (pid_t *)malloc(childrenAmount * sizeof(pid_t));
 
 		syslog(LOG_INFO, "Amount of children(keywords): %d", childrenAmount);
@@ -193,8 +195,8 @@ int main(int argc, char* argv[]) {
 
 
 				// - Setting SIGUSR1 and SIGUSR2 handling as default
-				signal(SIGUSR1, handleChildSignals);
-				signal(SIGUSR2, handleChildSignals);
+				signal(SIGUSR1, SIG_DFL);
+				signal(SIGUSR2, SIG_DFL);
 
 				// struct sigaction ch_sa;
 				// ch_sa.sa_handler = handleChildSignals;
@@ -277,6 +279,7 @@ int main(int argc, char* argv[]) {
 			waitpid(children[childno], &childrenExitStatuses[childno], 0);
 			if (WIFSIGNALED(childrenExitStatuses[childno])) {
 				termSig = WTERMSIG(childrenExitStatuses[childno]);
+				syslog(LOG_INFO, "TERMSIG = %s", strsignal(termSig));
 			}
 		}
 
@@ -329,6 +332,9 @@ int main(int argc, char* argv[]) {
 			syslog(LOG_INFO, "%s", message);
 		}
 
+		childrenAmount = 0;		/* clears the counter */
+		// sets SIGUSR2 handling as 'ignore' so it wouldn't awaken the daemon
+		signal(SIGUSR2, SIG_IGN);
 		// closes the open syslog connection
 		closelog();
 		// - Putting the daemon to sleep

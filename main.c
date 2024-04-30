@@ -59,6 +59,8 @@ int main(int argc, char* argv[]) {
 			keyWords[keyWordsAmount++] = argv[i];
 		}
 	}
+	// to handle no_keywords exception
+	if (!keyWordsAmount) return -1;
 
 	// Init the daemon
 	if(daemonise()) return -1;

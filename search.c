@@ -3,9 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-// #include <sys/wait.h>
 #include <sys/stat.h>
-// #include <signal.h>
 #include <syslog.h>
 
 #include "search.h"
@@ -36,11 +34,11 @@ void search(const char *path, const char *keyword, int *anyFilesFound, int verbo
         snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
 
 
-   //      if (verbose) {
-   //      	setCurrentTime(time_str, sizeof(time_str));
-			// sprintf(message, "%s | Checking file: %s, Pattern: %s", time_str, fullPath, keyword);
-			// syslog(LOG_INFO, "%s", message);
-   //      }
+        if (verbose) {
+        	setCurrentTime(time_str, sizeof(time_str));
+			sprintf(message, "%s | Checking file: %s, Pattern: %s", time_str, fullPath, keyword);
+			syslog(LOG_INFO, "%s", message);
+        }
         
 
         
@@ -52,11 +50,6 @@ void search(const char *path, const char *keyword, int *anyFilesFound, int verbo
         	}
             continue;		// skip to the next iteration
         }
-
-        // if (S_ISREG(statbuf.st_mode)) {	// checks if entry is a regular file
-            
-        // }
-        // char* entryType = 
 
         if (strstr(entry->d_name, keyword) != NULL) { // compare the entry name to searching file name
         	setCurrentTime(time_str, sizeof(time_str));

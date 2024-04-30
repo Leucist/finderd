@@ -3,8 +3,6 @@
 #include <stdlib.h>		// for atoi()
 #include <sys/types.h>	// for pid_t
 #include <unistd.h>		// for fork(), setsid(), sleep(), sysconf()
-#include <fcntl.h>		// for handling file descriptors
-#include <syslog.h>
 #include <signal.h>
 #include <sys/wait.h>	// for waitpid()
 

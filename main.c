@@ -11,7 +11,6 @@
 #include "daemonise.h"
 #include "sendLog.h"
 #include "search.h"
-#include "setCurrentTime.h"
 
 pid_t *children;
 int childrenAmount = 0;

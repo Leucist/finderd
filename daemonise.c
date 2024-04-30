@@ -1,3 +1,8 @@
+#include <stdio.h>		/* for perror() */
+#include <stdlib.h>		/* for exit() */
+#include <unistd.h>		/* for fork(), setsid()... */
+#include <fcntl.h>		/* for work with files */
+
 #include "daemonise.h"
 
 int daemonise() {

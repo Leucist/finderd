@@ -4,7 +4,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <syslog.h>
 
 #include "search.h"
 #include "sendLog.h"

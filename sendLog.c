@@ -1,4 +1,5 @@
 #include <syslog.h>
+#include <stddef.h>		/* for size_t */
 
 #include "sendLog.h"
 #include "setCurrentTime.h"

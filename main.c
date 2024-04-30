@@ -9,6 +9,7 @@
 #include <sys/wait.h>	// for waitpid()
 
 #include "daemonise.h"
+#include "sendLog.h"
 #include "search.h"
 #include "setCurrentTime.h"
 
@@ -22,37 +23,21 @@ void killChildren(int signo) {
 }
 
 void handleSignals(int signo) {
-
-
-
-	char time_str[64];
+	// sends the notification about caught signal to the SYSLOG
     char message[256];
-	setCurrentTime(time_str, sizeof(time_str));
-	sprintf(message, "%s | [PARENT]: Received signal %d: %s", time_str, signo, strsignal(signo));
-	syslog(LOG_INFO, "%s", message);
-
-
-
+	sprintf(message, "[PARENT]: Received signal %d: %s", signo, strsignal(signo));
+	sendLog(message);
 
 	if (signo == SIGUSR1 || signo == SIGUSR2 || signo == SIGINT) {
-		// if (childrenAmount > 0) {
-			// redirects the signal to the children
-			killChildren(signo);
-		// }
+		// redirects the signal to the children
+		killChildren(signo);
 
 		if (signo == SIGINT) {	/* < to avoid creating orphans in any way */
 			free(children);
-			closelog();
 			exit(-1);
 		}
 	}
 }
-
-// void handleChildSignals(int signo) {
-// 	// sends signal SIGUSR1 to the parent process and terminate
-// 	kill(getppid(), signo);
-// 	exit(0);
-// }
 
 int main(int argc, char* argv[]) {
 	// Handle params
@@ -61,8 +46,7 @@ int main(int argc, char* argv[]) {
 	int keyWordsAmount = 0;		/* amount of the given keywords */
 	char* keyWords[argc - 1];	/* array to store the keywords */
 
-    char time_str[64];
-    char message[256];
+    char message[256];			/* string to contain message to the SYSLOG */
 
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-v") == 0) notificationsEnabled = 1;
@@ -82,21 +66,12 @@ int main(int argc, char* argv[]) {
 	if(daemonise()) return -1;
 	// if(daemon(0, 0)) return -1;
 
-	
-	// opens connection with the syslog (user-level messages with pid in each one)
-	openlog("finderd", LOG_PID, LOG_USER);
-
 	while(1) {
-
-
-		syslog(LOG_INFO, "- - - - - - - - - - - - - - - - - - - - - - -");
-
-
+		// <- just to separate daemon log entries visually when there are many
+		sendLog("- - - - - - - - - - - - - - - - - - - - - - -");
 		// notifies about daemon awakening
 		if (notificationsEnabled) {
-			setCurrentTime(time_str, sizeof(time_str));
-			sprintf(message, "%s | Daemon woke up", time_str);
-			syslog(LOG_INFO, "%s", message);
+			sendLog("Daemon woke up");
 		}
 
 
@@ -121,7 +96,10 @@ int main(int argc, char* argv[]) {
 		childrenAmount = keyWordsAmount;	/* resets the counter */
 		children = (pid_t *)malloc(childrenAmount * sizeof(pid_t));
 
-		syslog(LOG_INFO, "Amount of children(keywords): %d", childrenAmount);
+		if (notificationsEnabled) {
+			sprintf(message, "Amount of children(keywords): %d", childrenAmount);
+			sendLog(message);
+		}
 
 		for (int i = 0; i < childrenAmount; i++) {
 			pid = fork();
@@ -232,21 +210,14 @@ int main(int argc, char* argv[]) {
 			waitpid(children[childno], &childrenExitStatuses[childno], 0);
 			if (WIFSIGNALED(childrenExitStatuses[childno])) {
 				termSig = WTERMSIG(childrenExitStatuses[childno]);
-				syslog(LOG_INFO, "TERMSIG = %s", strsignal(termSig));
 			}
 		}
 
 		// - Freeing the memory allocated with the malloc()
 		free(children);
 
-
-
-		setCurrentTime(time_str, sizeof(time_str));
-		sprintf(message, "%s | Children were freed", time_str);
-		syslog(LOG_INFO, "%s", message);
-
-
-
+		if (notificationsEnabled)
+			sendLog("Children were freed");
 
 		// - Daemon handles the termSig
 		// (gathers the exit codes of the children which indicate whether any files were found if children exited normally)
@@ -261,35 +232,27 @@ int main(int argc, char* argv[]) {
 		// if child process was terminated by the signal
 		else {
 			if (notificationsEnabled) {
-				setCurrentTime(time_str, sizeof(time_str));
-				sprintf(message, "%s | Daemon was interrupted by the signal number %d: %s", time_str, termSig, strsignal(termSig));
-				syslog(LOG_INFO, "%s", message);
+				sprintf(message, "Daemon was interrupted by the signal number %d: %s", termSig, strsignal(termSig));
+				sendLog(message);
 			}
 			if (termSig == SIGUSR1) { /* reruns the search immediately */
-				closelog();
-				continue;	// skips the sleep and restarts immediately
+				continue;	// skips the sleep
 			}
 		}
 
 		// - Notifying if no files were found
 		if (filesFound <= 0) {
-			setCurrentTime(time_str, sizeof(time_str));
-			sprintf(message, "%s | No files found", time_str);
-			syslog(LOG_INFO, "%s", message);
+			sendLog("No files found");
 		}
 
 		// - Notifying about putting the daemon to sleep
 		if (notificationsEnabled) {
-			setCurrentTime(time_str, sizeof(time_str));
-			sprintf(message, "%s | Daemon fell asleep", time_str);
-			syslog(LOG_INFO, "%s", message);
+			sendLog("Daemon fell asleep");
 		}
 
 		childrenAmount = 0;		/* clears the counter */
 		// sets SIGUSR2 handling as 'ignore' so it wouldn't awaken the daemon
 		signal(SIGUSR2, SIG_IGN);
-		// closes the open syslog connection
-		closelog();
 		// - Putting the daemon to sleep
 		sleep(delay);
 	}

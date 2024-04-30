@@ -7,21 +7,18 @@
 #include <syslog.h>
 
 #include "search.h"
-#include "setCurrentTime.h"
+#include "sendLog.h"
 
 void search(const char *path, const char *keyword, int *anyFilesFound, int verbose) {
     DIR *dir;
     struct dirent *entry;		// starting directory
     struct stat statbuf;		// current directory
     char fullPath[PATH_MAX];	// structure that hold file attributes
-    char time_str[64];			// string to contain current time
-    char message[256];			// message to be sent to the syslog
+    char message[256];			// message to be sent to the SYSLOG
 
     if ((dir = opendir(path)) == NULL) { // open starting directory and return in case of errors
         if(verbose){			// if we have -v parameter
-        	setCurrentTime(time_str, sizeof(time_str));
-			sprintf(message, "%s | Failed to open directory", time_str);
-			syslog(LOG_INFO, "%s", message);
+        	sendLog("Failed to open directory");
         }
         closedir(dir);
         return;
@@ -35,26 +32,23 @@ void search(const char *path, const char *keyword, int *anyFilesFound, int verbo
 
 
         if (verbose) {
-        	setCurrentTime(time_str, sizeof(time_str));
-			sprintf(message, "%s | Checking file: %s, Pattern: %s", time_str, fullPath, keyword);
-			syslog(LOG_INFO, "%s", message);
+			sprintf(message, "Checking file: %s, Pattern: %s", fullPath, keyword);
+			sendLog(message);
         }
         
 
         
         if (lstat(fullPath, &statbuf) != 0) { // checks if entry cannot be accessed
         	if(verbose) {
-        		setCurrentTime(time_str, sizeof(time_str));
-				sprintf(message, "%s | %s is not accessible", time_str, fullPath);
-				syslog(LOG_INFO, "%s", message);
+				sprintf(message, "%s is not accessible", fullPath);
+				sendLog(message);
         	}
             continue;		// skip to the next iteration
         }
 
         if (strstr(entry->d_name, keyword) != NULL) { // compare the entry name to searching file name
-        	setCurrentTime(time_str, sizeof(time_str));
-			sprintf(message, "%s | Found: %s, Pattern: %s", time_str, fullPath, keyword);
-			syslog(LOG_INFO, "%s", message);
+			sprintf(message, "Found: %s, Pattern: %s", fullPath, keyword);
+			sendLog(message);
 			*anyFilesFound = 1;
         }
 
